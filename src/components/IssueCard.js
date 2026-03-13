@@ -6,9 +6,16 @@ export default function IssueCard({ issue, onPress }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.header}>
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryIcon}>{getCategoryIcon(issue.category)}</Text>
-          <Text style={styles.categoryText}>{issue.category}</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryIcon}>{getCategoryIcon(issue.category)}</Text>
+            <Text style={styles.categoryText}>{issue.category}</Text>
+          </View>
+          {issue.status && issue.status !== 'pending' && (
+            <View style={[styles.statusBadge, issue.status === 'received' ? styles.statusReceived : styles.statusDeclined]}>
+              <Text style={styles.statusText}>{issue.status}</Text>
+            </View>
+          )}
         </View>
         <Text style={styles.time}>{formatTimeAgo(issue.createdAt)}</Text>
       </View>
@@ -49,6 +56,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -56,6 +68,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusReceived: {
+    backgroundColor: COLORS.success + '30',
+  },
+  statusDeclined: {
+    backgroundColor: COLORS.error + '30',
+  },
+  statusText: {
+    fontSize: SIZES.xs,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   categoryIcon: {
     fontSize: 14,

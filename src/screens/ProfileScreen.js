@@ -1,16 +1,24 @@
 import { collection, getDocs, query, where } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput, Image } from 'react-native';
 import { COLORS, SIZES } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../services/firebase';
+import { db, storage } from '../services/firebase';
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUserPhoto, updateProfileDetails } = useAuth();
   const [stats, setStats] = useState({
     reportsCount: 0,
     confirmationsCount: 0
   });
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(user?.name || '');
+  const [editDistrict, setEditDistrict] = useState(user?.district || '');
+  const [editDepartment, setEditDepartment] = useState(user?.department || '');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -56,6 +64,64 @@ export default function ProfileScreen({ navigation }) {
     );
   };
 
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission denied', 'We need camera roll permissions to update your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      uploadImage(result.assets[0].uri);
+    }
+  };
+
+  const uploadImage = async (uri) => {
+    setUploading(true);
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filename = `profiles/${user.uid}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, filename);
+      
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      await updateUserPhoto(downloadURL);
+      Alert.alert('Success', 'Profile picture updated successfully');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to update profile picture');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const updates = {
+        name: editName,
+        district: editDistrict
+      };
+      if (user.role === 'official') {
+        updates.department = editDepartment;
+      }
+      await updateProfileDetails(updates);
+      setIsEditing(false);
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to update profile');
+    }
+  };
+
   const impactScore = stats.reportsCount * 10 + stats.confirmationsCount * 5;
 
   return (
@@ -65,13 +131,68 @@ export default function ProfileScreen({ navigation }) {
       </View>
 
       <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.name?.charAt(0).toUpperCase() || '?'}
-          </Text>
-        </View>
-        <Text style={styles.name}>{user?.name || 'User'}</Text>
-        <Text style={styles.email}>{user?.email}</Text>
+        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage} disabled={uploading}>
+          {user?.photoURL ? (
+            <Image source={{ uri: user.photoURL }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {user?.name?.charAt(0).toUpperCase() || '?'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.editAvatarBadge}>
+            <Text style={styles.editAvatarIcon}>📷</Text>
+          </View>
+        </TouchableOpacity>
+        
+        {isEditing ? (
+          <View style={styles.editForm}>
+            <TextInput style={styles.input} value={editName} onChangeText={setEditName} placeholder="Full Name" />
+            <TextInput style={styles.input} value={editDistrict} onChangeText={setEditDistrict} placeholder="District" />
+            {user?.role === 'official' && (
+              <TextInput style={styles.input} value={editDepartment} onChangeText={setEditDepartment} placeholder="Department" />
+            )}
+            <View style={styles.editActions}>
+              <TouchableOpacity style={[styles.editBtn, styles.cancelBtn]} onPress={() => setIsEditing(false)}>
+                <Text style={styles.btnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.editBtn, styles.saveBtn]} onPress={handleSaveProfile}>
+                <Text style={styles.btnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <>
+            <View style={styles.nameContainer}>
+              <Text style={styles.name}>{user?.name || 'User'}</Text>
+              {user?.role === 'official' && user?.isVerified && (
+                <Text style={styles.verifiedBadge}>✓</Text>
+              )}
+            </View>
+            <Text style={styles.email}>{user?.email}</Text>
+            
+            <View style={styles.badgesRow}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeLabel}>Role: {user?.role}</Text>
+              </View>
+              {user?.district && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeLabel}>📍 {user?.district}</Text>
+                </View>
+              )}
+            </View>
+            {user?.role === 'official' && user?.department && (
+              <View style={[styles.badge, { marginTop: 8 }]}>
+                <Text style={styles.badgeLabel}>{user?.department}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity style={styles.editProfileBtn} onPress={() => setIsEditing(true)}>
+              <Text style={styles.editProfileText}>Edit Profile</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <View style={styles.statsContainer}>
@@ -197,6 +318,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16
+  },
   avatar: {
     width: 80,
     height: 80,
@@ -204,22 +329,125 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  editAvatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.secondary,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white
+  },
+  editAvatarIcon: {
+    fontSize: 12
   },
   avatarText: {
     fontSize: 36,
     fontWeight: 'bold',
     color: COLORS.white
   },
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4
+  },
   name: {
     fontSize: SIZES.xl,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 4
+  },
+  verifiedBadge: {
+    fontSize: SIZES.md,
+    color: COLORS.white,
+    backgroundColor: COLORS.success,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    textAlign: 'center',
+    overflow: 'hidden',
+    lineHeight: 20,
+    marginLeft: 8
   },
   email: {
     fontSize: SIZES.md,
-    color: COLORS.textLight
+    color: COLORS.textLight,
+    marginBottom: 16
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'center'
+  },
+  badge: {
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border
+  },
+  badgeLabel: {
+    fontSize: SIZES.xs,
+    color: COLORS.text,
+    fontWeight: '500',
+    textTransform: 'capitalize'
+  },
+  editProfileBtn: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.primary
+  },
+  editProfileText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    fontSize: SIZES.sm
+  },
+  editForm: {
+    width: '100%',
+    gap: 12
+  },
+  input: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: SIZES.sm
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8
+  },
+  editBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  cancelBtn: {
+    backgroundColor: COLORS.textLight
+  },
+  saveBtn: {
+    backgroundColor: COLORS.primary
+  },
+  btnText: {
+    color: COLORS.white,
+    fontWeight: 'bold'
   },
   statsContainer: {
     flexDirection: 'row',

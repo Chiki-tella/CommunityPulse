@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useAuth } from '../context/AuthContext';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, DISTRICTS } from '../constants/theme';
 
 export default function AuthScreen({ navigation }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [role, setRole] = useState('citizen');
+  const [district, setDistrict] = useState('Gasabo');
+  const [department, setDepartment] = useState('Infrastructure');
   const [loading, setLoading] = useState(false);
   const { login, signup } = useAuth();
 
@@ -22,7 +26,9 @@ export default function AuthScreen({ navigation }) {
       if (isLogin) {
         await login(email, password);
       } else {
-        await signup(email, password, name);
+        await signup(email, password, name, role, district, role === 'official' ? department : '');
+        Alert.alert('Success', 'Account created! Please verify your email before logging in.');
+        setIsLogin(true); // switch to login after sign up
       }
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -47,16 +53,66 @@ export default function AuthScreen({ navigation }) {
 
         <View style={styles.form}>
           {!isLogin && (
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Full Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your name"
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-              />
-            </View>
+            <>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Full Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your name"
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Account Type</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={role}
+                    onValueChange={(itemValue) => setRole(itemValue)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Citizen" value="citizen" />
+                    <Picker.Item label="Official" value="official" />
+                  </Picker>
+                </View>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Your District</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={district}
+                    onValueChange={(itemValue) => setDistrict(itemValue)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Gasabo" value="Gasabo" />
+                    <Picker.Item label="Kicukiro" value="Kicukiro" />
+                    <Picker.Item label="Nyarugenge" value="Nyarugenge" />
+                  </Picker>
+                </View>
+              </View>
+
+              {role === 'official' && (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Department</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={department}
+                      onValueChange={(itemValue) => setDepartment(itemValue)}
+                      style={styles.picker}
+                    >
+                      <Picker.Item label="Infrastructure" value="Infrastructure" />
+                      <Picker.Item label="Water & Sanitation" value="Water" />
+                      <Picker.Item label="Electricity" value="Electricity" />
+                      <Picker.Item label="Public Health" value="Health" />
+                      <Picker.Item label="Security" value="Security" />
+                    </Picker>
+                  </View>
+                </View>
+              )}
+            </>
           )}
 
           <View style={styles.inputContainer}>
@@ -157,6 +213,17 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: SIZES.md,
     color: COLORS.text
+  },
+  pickerContainer: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    overflow: 'hidden'
+  },
+  picker: {
+    height: 50,
+    width: '100%'
   },
   button: {
     backgroundColor: COLORS.primary,

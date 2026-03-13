@@ -12,6 +12,8 @@ export default function IssueDetailScreen({ route, navigation }) {
   const { user } = useAuth();
   const [hasConfirmed, setHasConfirmed] = useState(false);
   const [confirmCount, setConfirmCount] = useState(issue.confirmations || 0);
+  const [issueStatus, setIssueStatus] = useState(issue.status || 'pending');
+  const [acknowledgedBy, setAcknowledgedBy] = useState(issue.acknowledgedBy || null);
 
   useEffect(() => {
     checkIfConfirmed();
@@ -53,6 +55,22 @@ export default function IssueDetailScreen({ route, navigation }) {
     }
   };
 
+  const handleOfficialAction = async (status) => {
+    try {
+      await updateDoc(doc(db, 'issues', issue.id), {
+        status: status, // 'received' or 'declined'
+        acknowledgedBy: user.name,
+        officialId: user.uid
+      });
+      setIssueStatus(status);
+      setAcknowledgedBy(user.name);
+      Alert.alert('Success', `Issue marked as ${status}`);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to update issue status');
+    }
+  };
+
   const handleShare = async () => {
     try {
       await Share.share({
@@ -81,13 +99,30 @@ export default function IssueDetailScreen({ route, navigation }) {
       )}
 
       <View style={styles.content}>
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryIcon}>{category?.icon}</Text>
-          <Text style={styles.categoryText}>{issue.category}</Text>
+        <View style={styles.tagsRow}>
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryIcon}>{category?.icon}</Text>
+            <Text style={styles.categoryText}>{issue.category}</Text>
+          </View>
+          {issueStatus !== 'pending' && (
+            <View style={[styles.statusBadge, issueStatus === 'received' ? styles.statusReceived : styles.statusDeclined]}>
+              <Text style={[styles.statusText, issueStatus === 'received' ? styles.textSuccess : styles.textError]}>
+                {issueStatus.toUpperCase()}
+              </Text>
+            </View>
+          )}
         </View>
 
         <Text style={styles.title}>{issue.title}</Text>
         <Text style={styles.time}>{formatTimeAgo(issue.createdAt)}</Text>
+        
+        {acknowledgedBy && (
+          <View style={styles.acknowledgedBox}>
+            <Text style={styles.acknowledgedText}>
+              {issueStatus === 'received' ? '✅ Received by' : '❌ Declined by'}: Official {acknowledgedBy}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Description</Text>
@@ -144,6 +179,26 @@ export default function IssueDetailScreen({ route, navigation }) {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {user?.role === 'official' && user?.isVerified && issueStatus === 'pending' && (
+          <View style={styles.officialActions}>
+            <Text style={styles.officialActionsTitle}>Official Actions</Text>
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.declineButton]}
+                onPress={() => handleOfficialAction('declined')}
+              >
+                <Text style={styles.actionButtonText}>Decline</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.receiveButton]}
+                onPress={() => handleOfficialAction('received')}
+              >
+                <Text style={styles.actionButtonText}>Receive Issue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -178,6 +233,12 @@ const styles = StyleSheet.create({
   content: {
     padding: 20
   },
+  tagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8
+  },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,7 +247,41 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     alignSelf: 'flex-start',
-    marginBottom: 12
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  statusReceived: {
+    backgroundColor: COLORS.success + '20',
+  },
+  statusDeclined: {
+    backgroundColor: COLORS.error + '20',
+  },
+  statusText: {
+    fontSize: SIZES.sm,
+    fontWeight: 'bold',
+  },
+  textSuccess: {
+    color: COLORS.success,
+  },
+  textError: {
+    color: COLORS.error,
+  },
+  acknowledgedBox: {
+    backgroundColor: COLORS.background,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary
+  },
+  acknowledgedText: {
+    fontSize: SIZES.md,
+    color: COLORS.text,
+    fontWeight: '500'
   },
   categoryIcon: {
     fontSize: 16,
@@ -272,5 +367,39 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: SIZES.lg,
     fontWeight: 'bold'
+  },
+  officialActions: {
+    marginTop: 24,
+    backgroundColor: COLORS.background,
+    padding: 20,
+    borderRadius: 16,
+  },
+  officialActionsTitle: {
+    fontSize: SIZES.lg,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 16,
+    textAlign: 'center'
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  declineButton: {
+    backgroundColor: COLORS.error,
+  },
+  receiveButton: {
+    backgroundColor: COLORS.primary,
+  },
+  actionButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: SIZES.md
   }
 });
