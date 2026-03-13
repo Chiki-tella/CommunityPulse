@@ -1,103 +1,201 @@
-import * as Location from 'expo-location';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { CATEGORIES, COLORS, SIZES } from '../constants/theme';
+import { db } from '../services/firebase';
 
-const categoryColors = {
-    Water: 'blue',
-    Roads: 'gray',
-    Waste: 'brown',
-    Electricity: 'yellow',
-    Safety: 'red',
-    Education: 'purple',
-    Other: 'green'
-};
+export default function MapScreen({ navigation }) {
+  const [issues, setIssues] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [region, setRegion] = useState({
+    latitude: 0,
+    longitude: 0,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421
+  });
 
-export default function MapScreen() {
-    const [location, setLocation] = useState(null);
-    const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const q = query(collection(db, 'issues'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const issuesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })).filter(issue => issue.location);
+      
+      setIssues(issuesData);
+      
+      if (issuesData.length > 0) {
+        setRegion({
+          latitude: issuesData[0].location.latitude,
+          longitude: issuesData[0].location.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421
+        });
+      }
+    });
 
-    // Dummy data for markers
-    const reports = [
-        { id: '1', title: 'Pothole on Main St', category: 'Roads', location: { latitude: 37.78825, longitude: -122.4324 } },
-        { id: '2', title: 'Streetlight out', category: 'Electricity', location: { latitude: 37.78925, longitude: -122.4344 } },
-    ];
+    return () => unsubscribe();
+  }, []);
 
-    useEffect(() => {
-        (async () => {
-            if (Platform.OS === 'web') {
-                setLoading(false);
-                return;
-            }
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                setLoading(false);
-                return;
-            }
-            try {
-                let loc = await Location.getCurrentPositionAsync({});
-                setLocation({
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                    latitudeDelta: 0.05,
-                    longitudeDelta: 0.05,
-                });
-            } catch (e) {
-                console.log(e);
-            }
-            setLoading(false);
-        })();
-    }, []);
+  const filteredIssues = selectedCategory
+    ? issues.filter(issue => issue.category === selectedCategory)
+    : issues;
 
-    if (Platform.OS === 'web') {
-        return (
-            <View style={styles.webContainer}>
-                <Text style={styles.webText}>Maps are not supported on the web version.</Text>
-                <Text style={styles.webText}>Please run on an Android device or emulator.</Text>
+  const getCategoryColor = (category) => {
+    const cat = CATEGORIES.find(c => c.id === category);
+    return cat?.color || COLORS.primary;
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Community Map</Text>
+        <Text style={styles.headerSubtitle}>{filteredIssues.length} issues</Text>
+      </View>
+
+      <MapView
+        style={styles.map}
+        region={region}
+        onRegionChangeComplete={setRegion}
+      >
+        {filteredIssues.map((issue) => (
+          <Marker
+            key={issue.id}
+            coordinate={{
+              latitude: issue.location.latitude,
+              longitude: issue.location.longitude
+            }}
+            pinColor={getCategoryColor(issue.category)}
+            onPress={() => navigation.navigate('IssueDetail', { issue })}
+          >
+            <View style={[styles.marker, { backgroundColor: getCategoryColor(issue.category) }]}>
+              <Text style={styles.markerText}>
+                {CATEGORIES.find(c => c.id === issue.category)?.icon || '📋'}
+              </Text>
             </View>
-        );
-    }
+          </Marker>
+        ))}
+      </MapView>
 
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#2f95dc" />
-                <Text style={styles.loadingText}>Fetching location...</Text>
-            </View>
-        );
-    }
-
-    return (
-        <View style={styles.container}>
-            <MapView
-                style={styles.map}
-                region={location || {
-                    latitude: 37.78825,
-                    longitude: -122.4324,
-                    latitudeDelta: 0.0922,
-                    longitudeDelta: 0.0421,
-                }}
-                showsUserLocation
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              !selectedCategory && styles.filterButtonActive
+            ]}
+            onPress={() => setSelectedCategory(null)}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              !selectedCategory && styles.filterButtonTextActive
+            ]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat.id}
+              style={[
+                styles.filterButton,
+                selectedCategory === cat.id && styles.filterButtonActive,
+                selectedCategory === cat.id && { backgroundColor: cat.color }
+              ]}
+              onPress={() => setSelectedCategory(cat.id)}
             >
-                {reports.map(report => (
-                    <Marker
-                        key={report.id}
-                        coordinate={report.location}
-                        title={report.title}
-                        description={report.category}
-                        pinColor={categoryColors[report.category] || 'red'}
-                    />
-                ))}
-            </MapView>
-        </View>
-    );
+              <Text style={styles.filterIcon}>{cat.icon}</Text>
+              <Text style={[
+                styles.filterButtonText,
+                selectedCategory === cat.id && styles.filterButtonTextActive
+              ]}>
+                {cat.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
-    map: { width: '100%', height: '100%' },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    loadingText: { marginTop: 10, color: 'gray' },
-    webContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-    webText: { fontSize: 16, textAlign: 'center', color: 'gray', marginTop: 10 }
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.white
+  },
+  header: {
+    backgroundColor: COLORS.white,
+    padding: 20,
+    paddingTop: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 1
+  },
+  headerTitle: {
+    fontSize: SIZES.xl,
+    fontWeight: 'bold',
+    color: COLORS.primary
+  },
+  headerSubtitle: {
+    fontSize: SIZES.sm,
+    color: COLORS.textLight,
+    marginTop: 2
+  },
+  map: {
+    flex: 1
+  },
+  marker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.white
+  },
+  markerText: {
+    fontSize: 16
+  },
+  filterContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  filterButtonActive: {
+    backgroundColor: COLORS.primary
+  },
+  filterIcon: {
+    fontSize: 16,
+    marginRight: 6
+  },
+  filterButtonText: {
+    fontSize: SIZES.sm,
+    color: COLORS.text,
+    fontWeight: '500'
+  },
+  filterButtonTextActive: {
+    color: COLORS.white
+  }
 });

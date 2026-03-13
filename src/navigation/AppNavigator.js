@@ -1,33 +1,96 @@
-import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Text } from 'react-native';
+import { COLORS } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 
+// Screens
+import AuthScreen from '../screens/AuthScreen';
 import HomeScreen from '../screens/HomeScreen';
+import IssueDetailScreen from '../screens/IssueDetailScreen';
 import MapScreen from '../screens/MapScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ReportIssueScreen from '../screens/ReportIssueScreen';
+import SplashScreen from '../screens/SplashScreen';
+import WelcomeScreen from '../screens/WelcomeScreen';
 
+const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textLight,
+        tabBarStyle: {
+          paddingBottom: 8,
+          paddingTop: 8,
+          height: 60
+        }
+      }}
+    >
+      <Tab.Screen 
+        name="Home" 
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🏠</Text>,
+          tabBarLabel: 'Home'
+        }}
+      />
+      <Tab.Screen 
+        name="Map" 
+        component={MapScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🗺️</Text>,
+          tabBarLabel: 'Map'
+        }}
+      />
+      <Tab.Screen 
+        name="ReportIssue" 
+        component={ReportIssueScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>➕</Text>,
+          tabBarLabel: 'Report'
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>👤</Text>,
+          tabBarLabel: 'Profile'
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
 export default function AppNavigator() {
-    return (
-        <Tab.Navigator
-            screenOptions={({ route }) => ({
-                tabBarIcon: ({ focused, color, size }) => {
-                    let iconName;
-                    if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
-                    else if (route.name === 'Map') iconName = focused ? 'map' : 'map-outline';
-                    else if (route.name === 'Report') iconName = focused ? 'add-circle' : 'add-circle-outline';
-                    else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
-                    return <Ionicons name={iconName} size={size} color={color} />;
-                },
-                tabBarActiveTintColor: '#2f95dc',
-                tabBarInactiveTintColor: 'gray',
-            })}
-        >
-            <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Community Reports' }} />
-            <Tab.Screen name="Map" component={MapScreen} options={{ title: 'Issue Map' }} />
-            <Tab.Screen name="Report" component={ReportIssueScreen} options={{ title: 'Report Issue' }} />
-            <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
-        </Tab.Navigator>
-    );
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!user ? (
+          <>
+            <Stack.Screen name="Splash" component={SplashScreen} />
+            <Stack.Screen name="Welcome" component={WelcomeScreen} />
+            <Stack.Screen name="Auth" component={AuthScreen} />
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            <Stack.Screen name="IssueDetail" component={IssueDetailScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
 }
